@@ -157,7 +157,7 @@
         <p class="note">
             This is read-only: it never sends calibration or write commands to the ESP32, it only reads the current sensor characteristic.
             Plant identification uses on-device MobileNet features matched against the reference photos in <code>data/images/</code>;
-            health is estimated from the closest historical readings for that plant in <code>data/plant_data.csv</code>. Both improve as you collect more entries with the main app.
+            health is estimated from the closest historical readings for that plant in <code>data/data.csv</code>. Both improve as you collect more entries with the main app.
         </p>
     </div>
 </div>
@@ -192,8 +192,8 @@
             knn = knnClassifier.create();
 
             setLoadStatus('Loading plant dataset…', 'loading');
-            const csvResp = await fetch('data/plant_data.csv');
-            if (!csvResp.ok) throw new Error('Could not find data/plant_data.csv');
+            const csvResp = await fetch('data/data.csv');
+            if (!csvResp.ok) throw new Error('Could not find data/data.csv');
             const csvText = await csvResp.text();
             historicalEntries = parseCSV(csvText);
 
