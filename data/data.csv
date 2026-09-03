@@ -1,0 +1,10 @@
+Timestamp,Plant Name,Variety,Watering Status,Temperature(C),Humidity(%),Soil Moisture(%),Health Score,Photo Quality,Notes
+2026-09-03T01:35:36.076Z,"Tulsi","",before,25.9,71,0,2,medium,""
+2026-09-03T01:35:59.664Z,"Tulsi","",before,25.9,71,0,2,medium,""
+2026-09-03T01:37:03.852Z,"Tulsi","",before,25.8,71,0,2,medium,""
+2026-09-03T01:37:29.033Z,"Tulsi","",before,25.7,71,0,1,medium,""
+2026-09-03T01:37:49.984Z,"Tulsi","",before,25.7,71,0,7,medium,""
+2026-09-03T01:38:11.745Z,"Tulsi","",before,25.7,72,0,6,medium,""
+2026-09-03T01:41:13.113Z,"stonecrop","",after,26.2,70,0,5,medium,""
+2026-09-03T01:41:50.412Z,"stonecrop","",after,26.2,70,0,5,medium,""
+2026-09-03T01:42:11.039Z,"stonecrop","",before,26.3,70,0,5,medium,""

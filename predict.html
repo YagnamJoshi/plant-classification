@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plant Predictor — Identify & Health Check</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+        min-height: 100vh;
+        padding: 12px;
+        color: #2c3e50;
+    }
+
+    .container {
+        max-width: 480px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+
+    .header {
+        background: linear-gradient(135deg, #2d5016 0%, #4a7c1b 100%);
+        color: white;
+        padding: 20px;
+        text-align: center;
+    }
+
+    .header h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+    .header p { font-size: 12px; opacity: 0.9; }
+
+    .content { padding: 16px; }
+
+    .section { margin-bottom: 18px; }
+
+    .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #888;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+    }
+
+    button {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .btn-primary { background: #2d5016; color: white; width: 100%; }
+    .btn-primary:hover { background: #1e3510; }
+    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+
+    .btn-secondary { background: #f0f0f0; color: #2c3e50; flex: 1; }
+    .btn-secondary:hover { background: #e0e0e0; }
+
+    .btn-success { background: #4caf50; color: white; width: 100%; padding: 12px; margin-top: 4px; }
+    .btn-success:hover { background: #45a049; }
+    .btn-success:disabled { background: #a5d6a7; cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 8px; margin-bottom: 10px; }
+
+    .status {
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        text-align: center;
+    }
+    .status.success { background: #e8f5e9; color: #2e7d32; }
+    .status.error { background: #ffebee; color: #c62828; }
+    .status.info { background: #e3f2fd; color: #1565c0; }
+    .status.loading { background: #fff3e0; color: #e65100; }
+
+    .preview-container {
+        width: 100%;
+        height: 220px;
+        border: 2px dashed #ddd;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fafafa;
+        margin-top: 10px;
+        overflow: hidden;
+    }
+    .preview-container img { width: 100%; height: 100%; object-fit: cover; }
+    .preview-container.empty::after { content: "📷 No photo yet"; color: #999; font-size: 14px; }
+
+    .sensor-data-display {
+        background: #e8f5e9;
+        border-left: 3px solid #2d5016;
+        padding: 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        margin-bottom: 10px;
+        font-family: "Courier New", monospace;
+    }
+    .sensor-data-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .sensor-data-row:last-child { margin-bottom: 0; }
+
+    #resultCard { margin-top: 8px; }
+
+    .note {
+        font-size: 11px;
+        color: #999;
+        margin-top: 10px;
+        line-height: 1.5;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🔍 Plant Predictor</h1>
+        <p>Photo + sensors → plant ID & health estimate</p>
+    </div>
+
+    <div class="content">
+        <div id="loadStatus" class="status loading">Loading AI model & reference dataset…</div>
+
+        <div class="section">
+            <div class="section-title">1. Leaf Photo</div>
+            <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+            <button class="btn-primary" onclick="document.getElementById('photoInput').click()">📸 Take / Choose Photo</button>
+            <div class="preview-container empty" id="photoPreview"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">2. Sensor Reading (optional, improves the health estimate)</div>
+            <div id="btStatus" class="status info">❌ Not connected to sensor</div>
+            <div class="btn-row">
+                <button class="btn-secondary" onclick="connectBLE()">Connect ESP32</button>
+                <button class="btn-secondary" onclick="readSensors()">Read Sensors</button>
+            </div>
+            <div id="sensorDisplay" class="sensor-data-display" style="display:none;">
+                <div class="sensor-data-row"><span>Temperature:</span><span id="sTemp">--°C</span></div>
+                <div class="sensor-data-row"><span>Humidity:</span><span id="sHum">--%</span></div>
+                <div class="sensor-data-row"><span>Soil Moisture:</span><span id="sSoil">--%</span></div>
+            </div>
+        </div>
+
+        <button class="btn-success" id="analyzeBtn" onclick="analyze()" disabled>🔎 Identify & Predict Health</button>
+
+        <div id="resultCard" style="display:none;"></div>
+
+        <p class="note">
+            This is read-only: it never sends calibration or write commands to the ESP32, it only reads the current sensor characteristic.
+            Plant identification uses on-device MobileNet features matched against the reference photos in <code>data/images/</code>;
+            health is estimated from the closest historical readings for that plant in <code>data/plant_data.csv</code>. Both improve as you collect more entries with the main app.
+        </p>
+    </div>
+</div>
+
+<!-- TensorFlow.js + MobileNet + KNN classifier (all client-side, GitHub Pages friendly) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
+
+<script>
+    // ==================== BLE UUIDs (must match the ESP32 sketch) ====================
+    const SERVICE_UUID = '12345678-1234-1234-1234-123456789012';
+    const CHARACTERISTIC_UUID = '87654321-4321-4321-4321-210987654321';
+
+    // ==================== STATE ====================
+    let mobilenetModel = null;
+    let knn = null;
+    let historicalEntries = [];
+    let plantEntries = {};
+    let currentPhotoImg = null;
+    let sensorReading = null;
+    let bleCharacteristic = null;
+    let isConnected = false;
+    let datasetReady = false;
+    let trainedExampleCount = 0;
+
+    // ==================== INIT: load model + build reference dataset ====================
+    async function init() {
+        try {
+            setLoadStatus('Loading AI model…', 'loading');
+            mobilenetModel = await mobilenet.load();
+            knn = knnClassifier.create();
+
+            setLoadStatus('Loading plant dataset…', 'loading');
+            const csvResp = await fetch('data/plant_data.csv');
+            if (!csvResp.ok) throw new Error('Could not find data/plant_data.csv');
+            const csvText = await csvResp.text();
+            historicalEntries = parseCSV(csvText);
+
+            historicalEntries.forEach(e => {
+                (plantEntries[e.plantName] = plantEntries[e.plantName] || []).push(e);
+            });
+
+            let loaded = 0;
+            const total = historicalEntries.length;
+            for (const entry of historicalEntries) {
+                try {
+                    const img = await loadImage(entry.imagePath);
+                    const embedding = mobilenetModel.infer(img, true);
+                    knn.addExample(embedding, entry.plantName);
+                    trainedExampleCount++;
+                } catch (err) {
+                    console.warn('Skipping reference image:', entry.imagePath, err.message);
+                }
+                loaded++;
+                setLoadStatus(`Loading plant dataset… (${loaded}/${total})`, 'loading');
+            }
+
+            const plantNames = Object.keys(plantEntries);
+            if (trainedExampleCount === 0) {
+                setLoadStatus('⚠️ No reference photos could be loaded — check data/images/ paths', 'error');
+            } else {
+                setLoadStatus(`✅ Ready — trained on ${trainedExampleCount} photo(s) across ${plantNames.length} plant type(s): ${plantNames.join(', ')}`, 'success');
+            }
+            datasetReady = trainedExampleCount > 0;
+            updateAnalyzeButton();
+        } catch (err) {
+            setLoadStatus('❌ Setup failed: ' + err.message, 'error');
+        }
+    }
+
+    // ==================== CSV PARSING ====================
+    function parseCSVLine(line) {
+        const result = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') {
+                if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+                else inQuotes = !inQuotes;
+            } else if (c === ',' && !inQuotes) {
+                result.push(cur);
+                cur = '';
+            } else {
+                cur += c;
+            }
+        }
+        result.push(cur);
+        return result;
+    }
+
+    function parseCSV(text) {
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        const header = parseCSVLine(lines[0]);
+        const idx = name => header.indexOf(name);
+        const entries = [];
+        for (let i = 1; i < lines.length; i++) {
+            const cols = parseCSVLine(lines[i]);
+            entries.push({
+                rowNum: i, // 1-based, matches photo_N.jpg naming from the export tool
+                timestamp: cols[idx('Timestamp')],
+                plantName: (cols[idx('Plant Name')] || '').trim(),
+                variety: cols[idx('Variety')],
+                wateringStatus: cols[idx('Watering Status')],
+                temp: parseFloat(cols[idx('Temperature(C)')]),
+                humidity: parseFloat(cols[idx('Humidity(%)')]),
+                soil: parseFloat(cols[idx('Soil Moisture(%)')]),
+                healthScore: parseFloat(cols[idx('Health Score')]),
+                photoQuality: cols[idx('Photo Quality')],
+                notes: cols[idx('Notes')],
+                imagePath: `data/images/photo_${i}.jpg`
+            });
+        }
+        return entries;
+    }
+
+    function loadImage(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('failed to load ' + src));
+            img.src = src;
+        });
+    }
+
+    // ==================== PHOTO INPUT ====================
+    document.getElementById('photoInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+                currentPhotoImg = img;
+                const preview = document.getElementById('photoPreview');
+                preview.innerHTML = `<img src="${ev.target.result}">`;
+                preview.classList.remove('empty');
+                updateAnalyzeButton();
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function updateAnalyzeButton() {
+        document.getElementById('analyzeBtn').disabled = !(datasetReady && currentPhotoImg);
+    }
+
+    // ==================== BLE (READ-ONLY — never writes/calibrates the device) ====================
+    async function connectBLE() {
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'PlantSensor' }],
+                optionalServices: [SERVICE_UUID]
+            });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
+            bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+            isConnected = true;
+            setBtStatus('✅ Connected to PlantSensor', 'success');
+        } catch (err) {
+            setBtStatus('❌ Connection failed: ' + err.message, 'error');
+        }
+    }
+
+    async function readSensors() {
+        if (!isConnected || !bleCharacteristic) {
+            setBtStatus('❌ Connect to the sensor first', 'error');
+            return;
+        }
+        try {
+            const value = await bleCharacteristic.readValue(); // read-only
+            const decoder = new TextDecoder();
+            const data = JSON.parse(decoder.decode(value));
+            sensorReading = data;
+
+            document.getElementById('sTemp').textContent = `${data.temp}°C`;
+            document.getElementById('sHum').textContent = `${data.humidity}%`;
+            document.getElementById('sSoil').textContent = `${data.soil_moisture}%`;
+            document.getElementById('sensorDisplay').style.display = 'block';
+
+            setBtStatus('✅ Sensor data read', 'success');
+        } catch (err) {
+            setBtStatus('❌ Failed to read: ' + err.message, 'error');
+        }
+    }
+
+    // ==================== ANALYZE ====================
+    async function analyze() {
+        if (!currentPhotoImg || !datasetReady) return;
+        const btn = document.getElementById('analyzeBtn');
+        btn.disabled = true;
+        btn.textContent = '🔎 Analyzing…';
+
+        try {
+            const embedding = mobilenetModel.infer(currentPhotoImg, true);
+            const k = Math.min(5, trainedExampleCount);
+            const result = await knn.predictClass(embedding, k);
+            embedding.dispose();
+
+            const predictedPlant = result.label;
+            const confidence = (result.confidences[predictedPlant] * 100).toFixed(0);
+            const candidates = plantEntries[predictedPlant] || [];
+
+            let healthHtml;
+            if (!sensorReading) {
+                healthHtml = `<p style="font-size:13px;">Connect &amp; read the sensor for a health estimate — showing plant identification only.</p>`;
+            } else if (candidates.length === 0) {
+                healthHtml = `<p style="font-size:13px;">No historical sensor data yet for <strong>${predictedPlant}</strong> — add a few entries in the collector app to enable a health estimate.</p>`;
+            } else {
+                const predicted = predictHealth(candidates, sensorReading);
+                healthHtml = `
+                    <div class="sensor-data-display">
+                        <div class="sensor-data-row"><span>Predicted Health Score</span><span>${predicted.score.toFixed(1)} / 10</span></div>
+                        <div class="sensor-data-row"><span>Assessment</span><span>${healthLabel(predicted.score)}</span></div>
+                        <div class="sensor-data-row"><span>Based on</span><span>${predicted.k} similar past reading(s)</span></div>
+                    </div>`;
+            }
+
+            const card = document.getElementById('resultCard');
+            card.style.display = 'block';
+            card.innerHTML = `
+                <div class="section-title">Result</div>
+                <div class="sensor-data-display">
+                    <div class="sensor-data-row"><span>Identified Plant</span><span>${predictedPlant}</span></div>
+                    <div class="sensor-data-row"><span>Confidence</span><span>${confidence}%</span></div>
+                </div>
+                ${healthHtml}
+            `;
+        } catch (err) {
+            const card = document.getElementById('resultCard');
+            card.style.display = 'block';
+            card.innerHTML = `<div class="status error">❌ Analysis failed: ${err.message}</div>`;
+        }
+
+        btn.disabled = false;
+        btn.textContent = '🔎 Identify & Predict Health';
+    }
+
+    // Weighted k-nearest-neighbor regression over temp/humidity/soil, normalized per-plant.
+    function predictHealth(candidates, sensor) {
+        const dims = ['temp', 'humidity', 'soil'];
+        const ranges = {};
+        dims.forEach(d => {
+            const vals = candidates.map(c => c[d]).filter(v => !isNaN(v));
+            const min = Math.min(...vals), max = Math.max(...vals);
+            ranges[d] = { min, max: (max === min ? min + 1 : max) };
+        });
+        const sensorVec = { temp: sensor.temp, humidity: sensor.humidity, soil: sensor.soil_moisture };
+
+        const scored = candidates.map(c => {
+            let distSq = 0;
+            dims.forEach(d => {
+                const range = ranges[d].max - ranges[d].min;
+                const a = (c[d] - ranges[d].min) / range;
+                const b = (sensorVec[d] - ranges[d].min) / range;
+                distSq += (a - b) * (a - b);
+            });
+            return { entry: c, dist: Math.sqrt(distSq) };
+        }).sort((x, y) => x.dist - y.dist);
+
+        const k = Math.min(3, scored.length);
+        const nearest = scored.slice(0, k);
+        let weightSum = 0, scoreSum = 0;
+        nearest.forEach(n => {
+            const w = 1 / (n.dist + 0.01);
+            weightSum += w;
+            scoreSum += w * n.entry.healthScore;
+        });
+        return { score: scoreSum / weightSum, k };
+    }
+
+    function healthLabel(score) {
+        if (score >= 7) return '🟢 Good';
+        if (score >= 4) return '🟡 Fair';
+        return '🔴 Poor';
+    }
+
+    // ==================== STATUS HELPERS ====================
+    function setLoadStatus(msg, type) {
+        const el = document.getElementById('loadStatus');
+        el.textContent = msg;
+        el.className = `status ${type}`;
+    }
+    function setBtStatus(msg, type) {
+        const el = document.getElementById('btStatus');
+        el.textContent = msg;
+        el.className = `status ${type}`;
+    }
+
+    // ==================== BOOT ====================
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
